@@ -64,41 +64,6 @@ getTrendColor(trend, isBright) =>
             DIR_BULLISH => BULLISH_COLOR_DIM
             DIR_SIDEWAYS => SIDEWAYS_COLOR
 
-// Macro Trend on the Daily
-macroSeries = ta.sma(close, MACRO_TREND_DAYS)
-macroDailySeries = request.security(TICKER, "D", macroSeries)
-macroAvg0 = request.security(TICKER, "D", macroSeries[0])  // today
-macroAvg1 = request.security(TICKER, "D", macroSeries[1])  // yesterday
-macroTrend = getPriceTrend(macroAvg0, macroAvg1)
-macroTrendColor = getTrendColor(macroTrend, false)
-// macro plot is not useful on a daily chart except to see trend color
-// macroSMA = request.security(TICKER, "D", macroSeries)
-// plot(macroSMA, title="Macro SMA", color=macroTrendColor, linewidth=4)
-
-// Micro Trend on the 5M
-microSeries = ta.sma(close, MICRO_TREND_INTERVALS)
-microAvg0 = request.security(TICKER, "5", microSeries[0])
-microAvg1 = request.security(TICKER, "5", microSeries[1])
-microTrend = getPriceTrend(microAvg0, microAvg1)
-trendsMatch = (microTrend == macroTrend)
-microTrendColor = getTrendColor(microTrend, trendsMatch)
-microSMA = request.security(TICKER, "5", microSeries)
-
-// Bollinger Bands Squeeze
-keltPrd = 20
-keltFactor = 1.5
-cciPeriod = 50
-bbDeviations = 2.0
-bbPeriod = 20
-bbD = ta.cci(close, cciPeriod)
-bbDiff = ta.atr(keltPrd)*keltFactor
-bbStd = ta.stdev(close, bbPeriod)
-bbS = bbDeviations*bbStd/bbDiff
-bbSqueeze = bbS < 1 and bbD > 0 or bbS < 1 and bbD <= 0
-
-// RSI
-rsiValue = ta.rsi(close, RSI_LENGTH)
-
 //
 // Candle Analysis, Buy Signal
 //
@@ -135,23 +100,62 @@ labelColor = (buySignal == DIR_BEARISH) ? BEARISH_COLOR : BULLISH_COLOR
 score = (buySignal != DIR_SIDEWAYS) ? 70 : 0
 scoreInfo = array.new<string>()
 
+// Candle Height Ratio
 hSum = 0.0  
 for i = 0 to MICRO_TREND_INTERVALS - 1
     hSum += math.abs(close[i] - open[i])
 avgCandleHeight = hSum/MICRO_TREND_INTERVALS
-heightRatio = h0/avgCandleHeight
 
-if(heightRatio >= STRONG_HEIGHT_RATIO)
+if(h0/avgCandleHeight >= STRONG_HEIGHT_RATIO)
     score += 5
     scoreInfo.push("strong height")
+
+// Macro Trend on the Daily
+macroSeries = ta.sma(close, MACRO_TREND_DAYS)
+macroDailySeries = request.security(TICKER, "D", macroSeries)
+macroAvg0 = request.security(TICKER, "D", macroSeries[0])  // today
+macroAvg1 = request.security(TICKER, "D", macroSeries[1])  // yesterday
+macroTrend = getPriceTrend(macroAvg0, macroAvg1)
+// macro plot is not useful on a daily chart except to see trend color
+// macroTrendColor = getTrendColor(macroTrend, false)
+// macroSMA = request.security(TICKER, "D", macroSeries)
+// plot(macroSMA, title="Macro SMA", color=macroTrendColor, linewidth=4)
 
 if(buySignal == macroTrend)
     score += 5
     scoreInfo.push("macro trend")
 
+// Micro Trend on the 5M
+microSeries = ta.sma(close, MICRO_TREND_INTERVALS)
+microAvg0 = request.security(TICKER, "5", microSeries[0])
+microAvg1 = request.security(TICKER, "5", microSeries[1])
+microTrend = getPriceTrend(microAvg0, microAvg1)
+trendsMatch = (microTrend == macroTrend)
+microTrendColor = getTrendColor(microTrend, trendsMatch)
+microSMA = request.security(TICKER, "5", microSeries)
+
 if(buySignal == microTrend)
     score += 5
     scoreInfo.push("mictro trend")
+
+// Bollinger Bands Squeeze
+keltPrd = 20
+keltFactor = 1.5
+cciPeriod = 50
+bbDeviations = 2.0
+bbPeriod = 20
+bbD = ta.cci(close, cciPeriod)
+bbDiff = ta.atr(keltPrd)*keltFactor
+bbStd = ta.stdev(close, bbPeriod)
+bbS = bbDeviations*bbStd/bbDiff
+bbSqueeze = bbS < 1 and bbD > 0 or bbS < 1 and bbD <= 0
+
+if(bbSqueeze)
+    score += 5
+    scoreInfo.push("squeeze")
+
+// RSI
+rsiValue = ta.rsi(close, RSI_LENGTH)
 
 if(buySignal == DIR_BEARISH and rsiValue < 50 and rsiValue > RSI_OVERSOLD)
     score += 5
@@ -160,14 +164,14 @@ else if(buySignal == DIR_BULLISH and rsiValue > 50 and rsiValue < RSI_OVERBOUGHT
     score += 5
     scoreInfo.push("RSI-HI")
 
-if(bbSqueeze)
-    score += 5
-    scoreInfo.push("squeeze")
-
 grade = getGradeFromScore(score)
 
-// This drawing is unecessary but is used to specify a property for alerts.
+// This drawing is unecessary except to specify a property for alerts.
 plotarrow(buySignal, "Buy Signal", CLEAR_COLOR, CLEAR_COLOR, 0, 0, 1)
+
+midY = (open + close)/2
+plot(bbSqueeze ? midY : na, title="BB Squeeze", color=bbSqueeze ? SQUEEZE_COLOR : CLEAR_COLOR, style=plot.style_circles, linewidth=10)
+plot(microSMA, title="Micro Trend", color=microTrendColor, linewidth=3)
 
 if(grade != "F")
     hoverText = str.tostring(score)
@@ -177,8 +181,4 @@ if(grade != "F")
         label.new(bar_index, high + 5, text="PUT "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_down)
     else if(buySignal == DIR_BULLISH)
         label.new(bar_index, low - 5, text="CALL "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_up)
-
-midY = (open + close)/2
-plot(bbSqueeze ? midY : na, title="BB Squeeze", color=bbSqueeze ? SQUEEZE_COLOR : CLEAR_COLOR, style=plot.style_circles, linewidth=10)
-plot(microSMA, title="Micro Trend", color=microTrendColor, linewidth=3)
 
