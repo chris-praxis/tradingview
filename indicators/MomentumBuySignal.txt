@@ -1,0 +1,161 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © giantguppy
+// This indicator is only meant for a 5M Heiken-Ashi chart.
+
+//@version=6
+indicator("MomentumBuySignal", overlay=true)
+
+TICKER                  = syminfo.tickerid
+CLEAR_COLOR             = color.rgb(0, 0, 0, 0)
+BEARISH_COLOR_DIM       = color.rgb(150, 0, 0)
+BULLISH_COLOR_DIM       = color.rgb(0, 130, 0)
+BEARISH_COLOR_BRIGHT    = color.rgb(240, 60, 60)
+BULLISH_COLOR_BRIGHT    = color.rgb(60, 220, 60)
+SIDEWAYS_COLOR          = color.rgb(80, 80, 80)
+DIR_BEARISH             = -1
+DIR_BULLISH             = 1
+DIR_SIDEWAYS            = 0
+MACRO_TREND_DAYS        = 200
+MICRO_TREND_INTERVALS   = 20
+NUM_CANDLES_AVERAGE     = 50
+TREND_SLOPE_THRESH      = 0.0001
+BEARISH_SLOPE_THRESH    = 1 - TREND_SLOPE_THRESH
+BULLISH_SLOPE_THRESH    = 1 + TREND_SLOPE_THRESH
+MIN_GROWTH_RATIO        = 1.5
+MAX_OPPOSITE_WICK       = 0.1
+RSI_LENGTH              = 14
+RSI_OVERBOUGHT          = 80
+RSI_OVERSOLD            = 20
+
+getGradeFromScore(score) =>
+    if(score >= 95)
+        "A+"
+    else if(score >= 90)
+        "A"
+    else if(score >= 80)
+        "B"
+    else if(score >= 70)
+        "C"
+    else
+        "F"
+
+getPriceTrend(p0, p1) =>
+    s = p0/p1
+
+    if(s < BEARISH_SLOPE_THRESH)
+        DIR_BEARISH
+    else if(s > BULLISH_SLOPE_THRESH)
+        DIR_BULLISH
+    else
+        DIR_SIDEWAYS
+
+getTrendColor(trend, isBright) =>
+    if isBright
+        switch trend
+            DIR_BEARISH => BEARISH_COLOR_BRIGHT
+            DIR_BULLISH => BULLISH_COLOR_BRIGHT
+            DIR_SIDEWAYS => SIDEWAYS_COLOR
+    else
+        switch trend
+            DIR_BEARISH => BEARISH_COLOR_DIM
+            DIR_BULLISH => BULLISH_COLOR_DIM
+            DIR_SIDEWAYS => SIDEWAYS_COLOR
+
+// Macro Trend on the Daily
+macroSeries = ta.sma(close, MACRO_TREND_DAYS)
+macroDailySeries = request.security(TICKER, "D", macroSeries)
+macroAvg0 = request.security(TICKER, "D", macroSeries[0])  // today
+macroAvg1 = request.security(TICKER, "D", macroSeries[1])  // yesterday
+macroTrend = getPriceTrend(macroAvg0, macroAvg1)
+macroTrendColor = getTrendColor(macroTrend, false)
+// macro plot is not useful on a daily chart except to see trend color
+// macroSMA = request.security(TICKER, "D", macroSeries)
+// plot(macroSMA, title="Macro SMA", color=macroTrendColor, linewidth=4)
+
+// Micro Trend on the 5M
+microSeries = ta.sma(close, MICRO_TREND_INTERVALS)
+microAvg0 = request.security(TICKER, "5", microSeries[0])
+microAvg1 = request.security(TICKER, "5", microSeries[1])
+microTrend = getPriceTrend(microAvg0, microAvg1)
+trendsMatch = (microTrend == macroTrend)
+microTrendColor = getTrendColor(microTrend, trendsMatch)
+microSMA = request.security(TICKER, "5", microSeries)
+
+// RSI
+rsiValue = ta.rsi(close, RSI_LENGTH)
+
+//
+// Candle Analysis, Buy Signal
+//
+d0 = close[0] - open[0]
+d1 = close[1] - open[1]
+d2 = close[2] - open[2]
+d3 = close[3] - open[3]
+dir0 = (d0 > 0) ? DIR_BULLISH : DIR_BEARISH
+dir1 = (d1 > 0) ? DIR_BULLISH : DIR_BEARISH
+dir2 = (d2 > 0) ? DIR_BULLISH : DIR_BEARISH
+dir3 = (d3 > 0) ? DIR_BULLISH : DIR_BEARISH
+// minimum height of one avoids division by zero
+h0 = math.max(math.abs(d0), 1)
+h1 = math.max(math.abs(d1), 1)
+h2 = math.max(math.abs(d2), 1)
+lowerWickLength = math.min(open[0], close[0]) - low[0]
+upperWickLength = high[0] - math.max(open[0], close[0])
+oppositeWickLength = (dir0 == DIR_BEARISH) ? upperWickLength : lowerWickLength
+
+hSum = 0.0
+for i = 0 to NUM_CANDLES_AVERAGE - 1
+    hSum += math.abs(close[i] - open[i])
+minCandleHeight = hSum/NUM_CANDLES_AVERAGE
+
+// 2 candles one direction followed by 2 the opposite direction indicate pivot
+directionsCheck     = dir2 != dir1 and dir3 == dir2 and dir1 == dir0
+heightCheck         = h0 > h1 and h0 >= minCandleHeight
+growthRatioCheck    = h0/math.min(h1, h2) >= MIN_GROWTH_RATIO
+oppWickCheck        = oppositeWickLength <= MAX_OPPOSITE_WICK
+
+buySignal = if(directionsCheck and heightCheck and growthRatioCheck and oppWickCheck)
+    dir0
+else
+    DIR_SIDEWAYS    // no buy
+
+//
+// Score & Grade
+//
+labelColor = (buySignal == DIR_BEARISH) ? BEARISH_COLOR_DIM : BULLISH_COLOR_DIM
+scoreSum = (buySignal != DIR_SIDEWAYS) ? 70 : 0
+
+//<ToDo>
+// Play with volume requirement relative to average volume?
+// Use several indicators to add up a score, 5-10 points each...
+// - Volume greater than minimum/average
+// - Exiting Bollinger Band squeeze?
+
+if(buySignal == macroTrend)
+    scoreSum += 10
+
+if(buySignal == microTrend)
+    scoreSum += 5
+
+    // only consider RSI if following the micro trend
+    if(buySignal == DIR_BEARISH and rsiValue < 50 and rsiValue > RSI_OVERSOLD)
+        scoreSum += 5
+        labelColor := BEARISH_COLOR_BRIGHT
+    else if(buySignal == DIR_BULLISH and rsiValue > 50 and rsiValue < RSI_OVERBOUGHT)
+        scoreSum += 5
+        labelColor := BULLISH_COLOR_BRIGHT
+
+score = math.min(scoreSum, 100)
+grade = getGradeFromScore(score)
+
+// This drawing is unecessary but is used to specify a property for alerts.
+plotarrow(buySignal, "Buy Signal", CLEAR_COLOR, CLEAR_COLOR)
+
+if(grade != "F")
+    if(buySignal == DIR_BEARISH)
+        label.new(bar_index, high + 5, text="PUT "+grade, tooltip=str.tostring(score), color=labelColor, style=label.style_label_down)
+    else if(buySignal == DIR_BULLISH)
+        label.new(bar_index, low - 5, text="CALL "+grade, tooltip=str.tostring(score), color=labelColor, style=label.style_label_up)
+
+plot(microSMA, title="Micro Trend", color=microTrendColor, linewidth=3)
+
