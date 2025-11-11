@@ -118,6 +118,10 @@ trendsMatch = (microTrend == macroTrend)
 microTrendColor = getTrendColor(microTrend, trendsMatch)
 microSMA = request.security(TICKER, "5", microSeries)
 
+// Put/Call Ratio
+putCallRatio = request.security("USI:PCC", "5", close)
+putCallDir = (putCallRatio > 1) ? DIR_BEARISH : DIR_BULLISH
+
 // RSI
 rsiValue = ta.rsi(close, RSI_LENGTH)
 
@@ -155,6 +159,10 @@ if(pivotDir == macroTrend)
 if(pivotDir == microTrend)
     score += 10
     scoreInfo.push("mictro trend")
+
+if(pivotDir == putCallDir)
+    score += 5
+    scoreInfo.push((putCallDir == DIR_BEARISH) ? "puts" : "calls")
 
 if(pivotDir == DIR_BEARISH and rsiValue < 50 and rsiValue > RSI_OVERSOLD)
     score += 5
