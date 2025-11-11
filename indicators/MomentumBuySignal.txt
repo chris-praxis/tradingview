@@ -1,6 +1,18 @@
 // This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 // © giantguppy
-// This indicator is only meant for a 5M Heiken-Ashi chart.
+//
+// DESCRIPTION
+// Momentum-based Tradingview indicator utilizes Heiken-Ashi data to detect
+// price action pivots and generates a buy signal with letter grade (A+, A, B,
+// or C) based on various factors, including macro trend, micro trend, and RSI.
+// An alert condition is exported so that user can be notified when to buy.
+// Designed for day-trading on a 5M timeframe, feel free to experiment with
+// others.
+//
+// DISCLAIMER
+// No buy signal is perfect, and many things are not taken into account. Use at
+// your own risk!
+//
 
 //@version=6
 indicator("MomentumBuySignal", overlay=true)
