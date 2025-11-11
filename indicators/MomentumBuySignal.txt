@@ -43,8 +43,8 @@ getGradeFromScore(score) =>
     else
         "F"
 
-getPriceTrend(p0, p1) =>
-    s = p0/p1
+getPriceTrend(data) =>
+    s = data[0]/data[1]
 
     if(s < BEARISH_SLOPE_THRESH)
         DIR_BEARISH
@@ -99,27 +99,20 @@ avgCandleHeight = hSum/MICRO_TREND_INTERVALS
 candleHeightRatio = h0/avgCandleHeight
 
 // Macro Trend on the Daily
-macroSeries = ta.ema(close, MACRO_TREND_DAYS)
-macroDailySeries = request.security(TICKER, "D", macroSeries)
-macroAvg0 = request.security(TICKER, "D", macroSeries[0])  // today
-macroAvg1 = request.security(TICKER, "D", macroSeries[1])  // yesterday
-macroTrend = getPriceTrend(macroAvg0, macroAvg1)
+macroAvg = request.security(TICKER, "D", ta.ema(close, MACRO_TREND_DAYS))
+macroTrend = getPriceTrend(macroAvg)
 // macro plot is not useful on a daily chart except to see trend color
 // macroTrendColor = getTrendColor(macroTrend, false)
-// macroAvg = request.security(TICKER, "D", macroSeries)
 // plot(macroAvg, title="Macro", color=macroTrendColor, linewidth=5)
 
 // Micro Trend on the 5M
-microSeries = ta.ema(close, MICRO_TREND_INTERVALS)
-microAvg0 = request.security(TICKER, "5", microSeries[0])
-microAvg1 = request.security(TICKER, "5", microSeries[1])
-microTrend = getPriceTrend(microAvg0, microAvg1)
+microAvg = ta.ema(close, MICRO_TREND_INTERVALS)
+microTrend = getPriceTrend(microAvg)
 trendsMatch = (microTrend == macroTrend)
 microTrendColor = getTrendColor(microTrend, trendsMatch)
-microAvg = request.security(TICKER, "5", microSeries)
 
 // Put/Call Ratio
-putCallRatio = request.security("USI:PCC", "5", close)
+putCallRatio = request.security("USI:PCC", timeframe.period, close)
 putCallDir = (putCallRatio > 1) ? DIR_BEARISH : DIR_BULLISH
 
 // RSI
@@ -166,10 +159,10 @@ if(pivotDir == putCallDir)
 
 if(pivotDir == DIR_BEARISH and rsiValue < 50 and rsiValue > RSI_OVERSOLD)
     score += 5
-    scoreInfo.push("RSI-LO")
+    scoreInfo.push("RSI-lo")
 else if(pivotDir == DIR_BULLISH and rsiValue > 50 and rsiValue < RSI_OVERBOUGHT)
     score += 5
-    scoreInfo.push("RSI-HI")
+    scoreInfo.push("RSI-hi")
 
 if(bbSqueeze)
     score += 5
