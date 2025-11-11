@@ -99,24 +99,24 @@ avgCandleHeight = hSum/MICRO_TREND_INTERVALS
 candleHeightRatio = h0/avgCandleHeight
 
 // Macro Trend on the Daily
-macroSeries = ta.sma(close, MACRO_TREND_DAYS)
+macroSeries = ta.ema(close, MACRO_TREND_DAYS)
 macroDailySeries = request.security(TICKER, "D", macroSeries)
 macroAvg0 = request.security(TICKER, "D", macroSeries[0])  // today
 macroAvg1 = request.security(TICKER, "D", macroSeries[1])  // yesterday
 macroTrend = getPriceTrend(macroAvg0, macroAvg1)
 // macro plot is not useful on a daily chart except to see trend color
 // macroTrendColor = getTrendColor(macroTrend, false)
-// macroSMA = request.security(TICKER, "D", macroSeries)
-// plot(macroSMA, title="Macro SMA", color=macroTrendColor, linewidth=4)
+// macroAvg = request.security(TICKER, "D", macroSeries)
+// plot(macroAvg, title="Macro", color=macroTrendColor, linewidth=5)
 
 // Micro Trend on the 5M
-microSeries = ta.sma(close, MICRO_TREND_INTERVALS)
+microSeries = ta.ema(close, MICRO_TREND_INTERVALS)
 microAvg0 = request.security(TICKER, "5", microSeries[0])
 microAvg1 = request.security(TICKER, "5", microSeries[1])
 microTrend = getPriceTrend(microAvg0, microAvg1)
 trendsMatch = (microTrend == macroTrend)
 microTrendColor = getTrendColor(microTrend, trendsMatch)
-microSMA = request.security(TICKER, "5", microSeries)
+microAvg = request.security(TICKER, "5", microSeries)
 
 // Put/Call Ratio
 putCallRatio = request.security("USI:PCC", "5", close)
@@ -140,7 +140,7 @@ midY = (open + close)/2
 plot(bbSqueeze ? midY : na, title="BB Squeeze", color=bbSqueeze ? SQUEEZE_COLOR : CLEAR_COLOR, style=plot.style_circles, linewidth=10)
 
 // draw micro trend line last, after BB squeeze
-plot(microSMA, title="Micro Trend", color=microTrendColor, linewidth=3)
+plot(microAvg, title="Micro Trend", color=microTrendColor, linewidth=3)
 
 //
 // Score & Grade
