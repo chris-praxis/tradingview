@@ -15,6 +15,7 @@ BEARISH_COLOR_BRIGHT    = color.rgb(240, 60, 60)
 BULLISH_COLOR_BRIGHT    = color.rgb(60, 220, 60)
 SIDEWAYS_COLOR          = color.rgb(80, 80, 80)
 SQUEEZE_COLOR           = color.rgb(0, 65, 255, 20)
+BUY_LABEL_MARGIN        = 5
 DIR_BEARISH             = -1
 DIR_BULLISH             = 1
 DIR_SIDEWAYS            = 0
@@ -65,7 +66,7 @@ getTrendColor(trend, isBright) =>
             DIR_SIDEWAYS => SIDEWAYS_COLOR
 
 //
-// Candle Analysis, Buy Signal
+// Candle Analysis, Pivot Detection
 //
 d0 = close[0] - open[0]
 d1 = close[1] - open[1]
@@ -86,29 +87,16 @@ oppositeWickLength = (dir0 == DIR_BEARISH) ? upperWickLength : lowerWickLength
 // 2 candles one direction followed by 2 the opposite direction indicate a pivot
 directionsCheck     = dir2 != dir1 and dir3 == dir2 and dir1 == dir0
 growthRatioCheck    = h0/math.min(h1, h2) >= MIN_GROWTH_RATIO
+heightCheck         = h0 > h1
 oppWickCheck        = oppositeWickLength <= MAX_OPPOSITE_WICK
-
-buySignal = if(directionsCheck and growthRatioCheck and oppWickCheck)
-    dir0
-else
-    DIR_SIDEWAYS    // no buy
-
-//
-// Score & Grade
-//
-labelColor = (buySignal == DIR_BEARISH) ? BEARISH_COLOR : BULLISH_COLOR
-score = (buySignal != DIR_SIDEWAYS) ? 70 : 0
-scoreInfo = array.new<string>()
+pivotDir            = (directionsCheck and growthRatioCheck and heightCheck and oppWickCheck) ? dir0 : DIR_SIDEWAYS
 
 // Candle Height Ratio
 hSum = 0.0  
 for i = 0 to MICRO_TREND_INTERVALS - 1
     hSum += math.abs(close[i] - open[i])
 avgCandleHeight = hSum/MICRO_TREND_INTERVALS
-
-if(h0/avgCandleHeight >= STRONG_HEIGHT_RATIO)
-    score += 5
-    scoreInfo.push("strong height")
+candleHeightRatio = h0/avgCandleHeight
 
 // Macro Trend on the Daily
 macroSeries = ta.sma(close, MACRO_TREND_DAYS)
@@ -121,10 +109,6 @@ macroTrend = getPriceTrend(macroAvg0, macroAvg1)
 // macroSMA = request.security(TICKER, "D", macroSeries)
 // plot(macroSMA, title="Macro SMA", color=macroTrendColor, linewidth=4)
 
-if(buySignal == macroTrend)
-    score += 5
-    scoreInfo.push("macro trend")
-
 // Micro Trend on the 5M
 microSeries = ta.sma(close, MICRO_TREND_INTERVALS)
 microAvg0 = request.security(TICKER, "5", microSeries[0])
@@ -134,9 +118,8 @@ trendsMatch = (microTrend == macroTrend)
 microTrendColor = getTrendColor(microTrend, trendsMatch)
 microSMA = request.security(TICKER, "5", microSeries)
 
-if(buySignal == microTrend)
-    score += 5
-    scoreInfo.push("mictro trend")
+// RSI
+rsiValue = ta.rsi(close, RSI_LENGTH)
 
 // Bollinger Bands Squeeze
 keltPrd = 20
@@ -152,33 +135,49 @@ bbSqueeze = bbS < 1 and bbD > 0 or bbS < 1 and bbD <= 0
 midY = (open + close)/2
 plot(bbSqueeze ? midY : na, title="BB Squeeze", color=bbSqueeze ? SQUEEZE_COLOR : CLEAR_COLOR, style=plot.style_circles, linewidth=10)
 
-if(bbSqueeze)
-    score += 5
-    scoreInfo.push("squeeze")
-
-// RSI
-rsiValue = ta.rsi(close, RSI_LENGTH)
-
 // draw micro trend line last, after BB squeeze
 plot(microSMA, title="Micro Trend", color=microTrendColor, linewidth=3)
 
-if(buySignal == DIR_BEARISH and rsiValue < 50 and rsiValue > RSI_OVERSOLD)
+//
+// Score & Grade
+// 
+score = (pivotDir != DIR_SIDEWAYS) ? 65 : 0
+scoreInfo = array.new<string>()
+
+if(candleHeightRatio >= STRONG_HEIGHT_RATIO)
+    score += 5
+    scoreInfo.push("strong height")
+
+if(pivotDir == macroTrend)
+    score += 5
+    scoreInfo.push("macro trend")
+
+if(pivotDir == microTrend)
+    score += 10
+    scoreInfo.push("mictro trend")
+
+if(pivotDir == DIR_BEARISH and rsiValue < 50 and rsiValue > RSI_OVERSOLD)
     score += 5
     scoreInfo.push("RSI-LO")
-else if(buySignal == DIR_BULLISH and rsiValue > 50 and rsiValue < RSI_OVERBOUGHT)
+else if(pivotDir == DIR_BULLISH and rsiValue > 50 and rsiValue < RSI_OVERBOUGHT)
     score += 5
     scoreInfo.push("RSI-HI")
+
+if(bbSqueeze)
+    score += 5
+    scoreInfo.push("squeeze")
 
 grade = getGradeFromScore(score)
 
 if(grade != "F")
     hoverText = str.tostring(score)
          +((scoreInfo.size() != 0) ? (": "+scoreInfo.join(", ")) : "")
+    labelColor = (pivotDir == DIR_BEARISH) ? BEARISH_COLOR : BULLISH_COLOR
 
-    if(buySignal == DIR_BEARISH)
-        label.new(bar_index, high + 5, text="PUT "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_down)
-    else if(buySignal == DIR_BULLISH)
-        label.new(bar_index, low - 5, text="CALL "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_up)
+    if(pivotDir == DIR_BEARISH)
+        label.new(bar_index, high + BUY_LABEL_MARGIN, text="PUT "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_down)
+    else if(pivotDir == DIR_BULLISH)
+        label.new(bar_index, low - BUY_LABEL_MARGIN, text="CALL "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_up)
 
 alertcondition(grade != "F", title="Buy Signal", message="{ticker}")
 
