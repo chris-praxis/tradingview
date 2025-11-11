@@ -149,6 +149,8 @@ bbDiff = ta.atr(keltPrd)*keltFactor
 bbStd = ta.stdev(close, bbPeriod)
 bbS = bbDeviations*bbStd/bbDiff
 bbSqueeze = bbS < 1 and bbD > 0 or bbS < 1 and bbD <= 0
+midY = (open + close)/2
+plot(bbSqueeze ? midY : na, title="BB Squeeze", color=bbSqueeze ? SQUEEZE_COLOR : CLEAR_COLOR, style=plot.style_circles, linewidth=10)
 
 if(bbSqueeze)
     score += 5
@@ -156,6 +158,9 @@ if(bbSqueeze)
 
 // RSI
 rsiValue = ta.rsi(close, RSI_LENGTH)
+
+// draw micro trend line last, after BB squeeze
+plot(microSMA, title="Micro Trend", color=microTrendColor, linewidth=3)
 
 if(buySignal == DIR_BEARISH and rsiValue < 50 and rsiValue > RSI_OVERSOLD)
     score += 5
@@ -166,13 +171,6 @@ else if(buySignal == DIR_BULLISH and rsiValue > 50 and rsiValue < RSI_OVERBOUGHT
 
 grade = getGradeFromScore(score)
 
-// This drawing is unecessary except to specify a property for alerts.
-plotarrow(buySignal, "Buy Signal", CLEAR_COLOR, CLEAR_COLOR, 0, 0, 1)
-
-midY = (open + close)/2
-plot(bbSqueeze ? midY : na, title="BB Squeeze", color=bbSqueeze ? SQUEEZE_COLOR : CLEAR_COLOR, style=plot.style_circles, linewidth=10)
-plot(microSMA, title="Micro Trend", color=microTrendColor, linewidth=3)
-
 if(grade != "F")
     hoverText = str.tostring(score)
          +((scoreInfo.size() != 0) ? (": "+scoreInfo.join(", ")) : "")
@@ -181,4 +179,6 @@ if(grade != "F")
         label.new(bar_index, high + 5, text="PUT "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_down)
     else if(buySignal == DIR_BULLISH)
         label.new(bar_index, low - 5, text="CALL "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_up)
+
+alertcondition(grade != "F", title="Buy Signal", message="{ticker}")
 
