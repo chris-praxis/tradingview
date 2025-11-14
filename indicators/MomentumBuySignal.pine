@@ -211,5 +211,5 @@ if(grade != "F")
     else if(pivotDir == DIR_BULLISH)
         label.new(bar_index, low - BUY_LABEL_MARGIN, text="CALL "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_up)
 
-alertcondition(grade != "F", title="Buy Signal", message="{ticker}")
+alertcondition(grade != "F", title="Buy Signal")
 
