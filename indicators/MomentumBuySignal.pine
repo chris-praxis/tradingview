@@ -3,11 +3,10 @@
 //
 // DESCRIPTION
 // Momentum-based Tradingview indicator utilizes Heiken-Ashi data to detect
-// price action pivots and generates a buy signal with letter grade (A+, A, B,
-// or C) based on various factors, including macro trend, micro trend, and RSI.
-// An alert condition is exported so that user can be notified when to buy.
-// Designed for day-trading on a 5M timeframe, feel free to experiment with
-// others.
+// price action pivots and generates a buy signal with letter grade based on
+// various factors, including macro trend, micro trend, and RSI. An alert
+// condition is exported so that user can be notified when to buy. Designed for
+// day-trading on a 5M timeframe, but feel free to experiment with others.
 //
 // DISCLAIMER
 // No buy signal is perfect, and many things are not taken into account. Use at
@@ -25,14 +24,14 @@ BULLISH_COLOR_DIM       = color.rgb(0, 130, 0)
 BEARISH_COLOR_BRIGHT    = color.rgb(240, 60, 60)
 BULLISH_COLOR_BRIGHT    = color.rgb(60, 220, 60)
 SIDEWAYS_COLOR          = color.rgb(80, 80, 80)
-SQUEEZE_COLOR           = color.rgb(0, 65, 255, 20)
-BUY_LABEL_MARGIN        = 8
+SQUEEZE_COLOR           = color.rgb(30, 70, 255, 25)
+BUY_LABEL_MARGIN        = 1
 DIR_BEARISH             = -1
 DIR_BULLISH             = 1
 DIR_SIDEWAYS            = 0
 MACRO_TREND_DAYS        = 200
 MICRO_TREND_INTERVALS   = 20
-TREND_SLOPE_EPSILON     = 0.0001
+TREND_SLOPE_EPSILON     = 0.00005
 MIN_GROWTH_RATIO        = 1.5
 MAX_OPPOSITE_WICK       = 0.1
 STRONG_HEIGHT_RATIO     = 1.3
@@ -41,7 +40,7 @@ RSI_OVERBOUGHT          = 80
 RSI_OVERSOLD            = 20
 
 getGradeFromScore(score) =>
-    if(score >= 95)
+    if(score >= 97)
         "A+"
     else if(score >= 90)
         "A"
@@ -86,6 +85,30 @@ haOpen = request.security(haTicker, timeframe.period, open)
 haHigh = request.security(haTicker, timeframe.period, high)
 haLow = request.security(haTicker, timeframe.period, low)
 
+// Macro Trend on the Daily
+macroAvg = ta.ema(close, MACRO_TREND_DAYS)
+macroAvg0 = request.security(ticker, "D", macroAvg[0])  // today
+macroAvg1 = request.security(ticker, "D", macroAvg[1])  // yesterday
+macroTrend = getTrendDirection(macroAvg0, macroAvg1, TREND_SLOPE_EPSILON)
+// macro plot is not useful on a daily chart except to see trend color
+// macroSeries = request.security(ticker, "D", macroAvg)
+// plot(macroSeries, title="Macro", color=getTrendColor(macroTrend, false), linewidth=5)
+
+// Micro Trend (very important)
+microAvg = (ta.ema(close, MICRO_TREND_INTERVALS) + ta.vwap(close))/2
+microTrend = getTrendDirection(microAvg[0], microAvg[1], TREND_SLOPE_EPSILON)
+trendsMatch = (microTrend == macroTrend)
+microTrendColor = getTrendColor(microTrend, trendsMatch)
+
+anchor = timeframe.change("1D")
+stdevMult = 1.0
+[vwap, upper, lower] = ta.vwap(open, anchor, stdevMult)
+distHigh = math.max(upper - vwap, 0.1)
+distLow = math.min(vwap - lower, 0.1)
+// plot(vwap, color=color.gray)
+// plot(upper, color=color.orange)
+// plot(lower, color=color.red)
+
 d0 = haClose[0] - haOpen[0]
 d1 = haClose[1] - haOpen[1]
 d2 = haClose[2] - haOpen[2]
@@ -103,11 +126,14 @@ oppositeWickLength = (dir0 == DIR_BEARISH)
      : (math.min(haOpen[0], haClose[0]) - haLow[0])  // lower
 
 // 2 candles one direction followed by 2 the opposite direction indicate a pivot
-directionsCheck     = dir2 != dir1 and dir3 == dir2 and dir1 == dir0
+candlesDirCheck     = dir2 != dir1 and dir3 == dir2 and dir1 == dir0
 growthRatioCheck    = h0/math.min(h1, h2) >= MIN_GROWTH_RATIO
 heightCheck         = h0 > h1
+trendCheck          = (dir0 == macroTrend or dir0 == microTrend)
 oppWickCheck        = oppositeWickLength <= MAX_OPPOSITE_WICK
-pivotDir            = (directionsCheck and growthRatioCheck and heightCheck and oppWickCheck) ? dir0 : DIR_SIDEWAYS
+pivotDir            = (candlesDirCheck and growthRatioCheck and heightCheck and trendCheck and oppWickCheck)
+                         ? dir0
+                         : DIR_SIDEWAYS  // no buy
 
 // Candle Height Ratio
 hSum = 0.0  
@@ -115,21 +141,6 @@ for i = 0 to MICRO_TREND_INTERVALS - 1
     hSum += math.abs(haClose[i] - haOpen[i])
 avgCandleHeight = hSum/MICRO_TREND_INTERVALS
 candleHeightRatio = h0/avgCandleHeight
-
-// Macro Trend on the Daily
-macroAvg = ta.ema(close, MACRO_TREND_DAYS)
-macroAvg0 = request.security(ticker, "D", macroAvg[0])  // today
-macroAvg1 = request.security(ticker, "D", macroAvg[1])  // yesterday
-macroTrend = getTrendDirection(macroAvg0, macroAvg1, TREND_SLOPE_EPSILON)
-// macro plot is not useful on a daily chart except to see trend color
-// macroSeries = request.security(ticker, "D", macroAvg)
-// plot(macroSeries, title="Macro", color=getTrendColor(macroTrend, false), linewidth=5)
-
-// Micro Trend on the 5M
-microAvg = ta.ema(haClose, MICRO_TREND_INTERVALS)
-microTrend = getTrendDirection(microAvg[0], microAvg[1], TREND_SLOPE_EPSILON)
-trendsMatch = (microTrend == macroTrend)
-microTrendColor = getTrendColor(microTrend, trendsMatch)
 
 // Put/Call Ratio
 putCallRatio = request.security("USI:PCC", timeframe.period, close)
@@ -149,8 +160,8 @@ bbDiff = ta.atr(keltPrd)*keltFactor
 bbStd = ta.stdev(close, bbPeriod)
 bbS = bbDeviations*bbStd/bbDiff
 bbSqueeze = bbS < 1 and bbD > 0 or bbS < 1 and bbD <= 0
-midY = (open + close)/2
-plot(bbSqueeze ? midY : na, title="BB Squeeze", color=bbSqueeze ? SQUEEZE_COLOR : CLEAR_COLOR, style=plot.style_circles, linewidth=10)
+midY = (haOpen + haClose)/2
+plot(bbSqueeze ? midY : na, title="BB Squeeze", color=bbSqueeze ? SQUEEZE_COLOR : CLEAR_COLOR, style=plot.style_circles, linewidth=15)
 
 // draw micro trend line last, after BB squeeze
 plot(microAvg, title="Micro Trend", color=microTrendColor, linewidth=3)
@@ -158,25 +169,20 @@ plot(microAvg, title="Micro Trend", color=microTrendColor, linewidth=3)
 //
 // Score & Grade
 // 
-score = (pivotDir != DIR_SIDEWAYS) ? 65 : 0
+score = (pivotDir != DIR_SIDEWAYS) ? 55 : 0
 scoreInfo = array.new<string>()
 
-if(candleHeightRatio >= STRONG_HEIGHT_RATIO)
-    score += 5
-    scoreInfo.push("strong height")
+if(dir0 == microTrend)
+    score += 20
+    scoreInfo.push("micro trend")
 
 if(pivotDir == macroTrend)
     score += 5
     scoreInfo.push("macro trend")
 
-if(pivotDir == microTrend)
-    score += 10
-    scoreInfo.push("mictro trend")
-
-    // only score BB squeeze if pivot direction matches micro trend
-    if(bbSqueeze)
-        score += 5
-        scoreInfo.push("squeeze")
+if(candleHeightRatio >= STRONG_HEIGHT_RATIO)
+    score += 5
+    scoreInfo.push("strong height")
 
 if(pivotDir == putCallDir)
     score += 5
@@ -188,6 +194,10 @@ if(pivotDir == DIR_BEARISH and rsiValue < 50 and rsiValue > RSI_OVERSOLD)
 else if(pivotDir == DIR_BULLISH and rsiValue > 50 and rsiValue < RSI_OVERBOUGHT)
     score += 5
     scoreInfo.push("RSI-hi")
+
+if(bbSqueeze)
+    score += 5
+    scoreInfo.push("squeeze")
 
 grade = getGradeFromScore(score)
 
