@@ -200,8 +200,9 @@ if(bbSqueeze)
     scoreInfo.push("squeeze")
 
 grade = getGradeFromScore(score)
+isBuyGrade = (grade != "F")
 
-if(grade != "F")
+if isBuyGrade
     hoverText = str.tostring(score)
          +((scoreInfo.size() != 0) ? (": "+scoreInfo.join(", ")) : "")
     labelColor = (pivotDir == DIR_BEARISH) ? BEARISH_COLOR : BULLISH_COLOR
@@ -211,5 +212,4 @@ if(grade != "F")
     else if(pivotDir == DIR_BULLISH)
         label.new(bar_index, low - BUY_LABEL_MARGIN, text="CALL "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_up)
 
-alertcondition(grade != "F", title="Buy Signal")
-
+alertcondition(isBuyGrade, title="Buy Signal")
