@@ -212,4 +212,10 @@ if isBuyGrade
     else if(pivotDir == DIR_BULLISH)
         label.new(bar_index, low - BUY_LABEL_MARGIN, text="CALL "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_up)
 
-alertcondition(isBuyGrade, title="Buy Signal")
+msg1 = "Buy Call or Put"
+alertcondition(isBuyGrade, title=msg1, message=msg1)
+msg2 = "Buy Call (bullish)"
+alertcondition(isBuyGrade and pivotDir == DIR_BULLISH, title=msg2, message=msg2)
+msg3 = "Buy Put (bearish)"
+alertcondition(isBuyGrade and pivotDir == DIR_BEARISH, title=msg3,  message=msg3)
+
