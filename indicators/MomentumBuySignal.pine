@@ -113,27 +113,36 @@ d0 = haClose[0] - haOpen[0]
 d1 = haClose[1] - haOpen[1]
 d2 = haClose[2] - haOpen[2]
 d3 = haClose[3] - haOpen[3]
+d4 = haClose[4] - haOpen[4]
 dir0 = (d0 > 0) ? DIR_BULLISH : DIR_BEARISH
 dir1 = (d1 > 0) ? DIR_BULLISH : DIR_BEARISH
 dir2 = (d2 > 0) ? DIR_BULLISH : DIR_BEARISH
 dir3 = (d3 > 0) ? DIR_BULLISH : DIR_BEARISH
+dir4 = (d4 > 0) ? DIR_BULLISH : DIR_BEARISH
 // minimum height of one avoids division by zero
 h0 = math.max(math.abs(d0), 1)
 h1 = math.max(math.abs(d1), 1)
 h2 = math.max(math.abs(d2), 1)
+h3 = math.max(math.abs(d3), 1)
 oppositeWickLength = (dir0 == DIR_BEARISH)
      ? (haHigh[0] - math.max(haOpen[0], haClose[0])) // upper
      : (math.min(haOpen[0], haClose[0]) - haLow[0])  // lower
 
 // 2 candles one direction followed by 2 the opposite direction indicate a pivot
-candlesDirCheck     = dir2 != dir1 and dir3 == dir2 and dir1 == dir0
-growthRatioCheck    = h0/math.min(h1, h2) >= MIN_GROWTH_RATIO
-heightCheck         = h0 > h1
-trendCheck          = (dir0 == macroTrend or dir0 == microTrend)
-oppWickCheck        = oppositeWickLength <= MAX_OPPOSITE_WICK
-pivotDir            = (candlesDirCheck and growthRatioCheck and heightCheck and trendCheck and oppWickCheck)
-                         ? dir0
-                         : DIR_SIDEWAYS  // no buy
+growthRatioCheckA       = h0/math.min(h1, h2) >= MIN_GROWTH_RATIO
+prevGrowthRatioCheckA   = h1/math.min(h2, h3) >= MIN_GROWTH_RATIO
+growthRatioCheckB       = h0/h1 >= MIN_GROWTH_RATIO and h1/h2 >= MIN_GROWTH_RATIO
+// 2-2 pivot case
+pivotCheckA             = dir2 != dir1 and dir3 == dir2 and dir1 == dir0 and growthRatioCheckA
+prevPivotCheckA         = dir3 != dir2 and dir4 == dir3 and dir2 == dir1 and prevGrowthRatioCheckA
+// 1-3 pivot case for "waterfall" detection (up or down)
+pivotCheckB             = dir3 != dir2 and dir2 == dir1 and dir1 == dir0 and growthRatioCheckB and not prevPivotCheckA
+heightCheck             = h0 > h1
+trendCheck              = (dir0 == macroTrend or dir0 == microTrend)
+oppWickCheck            = oppositeWickLength <= MAX_OPPOSITE_WICK
+buyDir                  = ((pivotCheckA or pivotCheckB) and heightCheck and trendCheck and oppWickCheck)
+                             ? dir0
+                             : DIR_SIDEWAYS  // no buy
 
 // Candle Height Ratio
 hSum = 0.0  
@@ -169,14 +178,16 @@ plot(microAvg, title="Micro Trend", color=microTrendColor, linewidth=3)
 //
 // Score & Grade
 // 
-score = (pivotDir != DIR_SIDEWAYS) ? 55 : 0
+// 1-3 candle pivot is slower and therefore not as good as 2-2 pivot
+baseScore = pivotCheckA ? 55 : 50
+score = (buyDir != DIR_SIDEWAYS) ? baseScore : 0
 scoreInfo = array.new<string>()
 
 if(dir0 == microTrend)
     score += 20
     scoreInfo.push("micro trend")
 
-if(pivotDir == macroTrend)
+if(buyDir == macroTrend)
     score += 5
     scoreInfo.push("macro trend")
 
@@ -184,14 +195,14 @@ if(candleHeightRatio >= STRONG_HEIGHT_RATIO)
     score += 5
     scoreInfo.push("strong height")
 
-if(pivotDir == putCallDir)
+if(buyDir == putCallDir)
     score += 5
     scoreInfo.push((putCallDir == DIR_BEARISH) ? "puts" : "calls")
 
-if(pivotDir == DIR_BEARISH and rsiValue < 50 and rsiValue > RSI_OVERSOLD)
+if(buyDir == DIR_BEARISH and rsiValue < 50 and rsiValue > RSI_OVERSOLD)
     score += 5
     scoreInfo.push("RSI-lo")
-else if(pivotDir == DIR_BULLISH and rsiValue > 50 and rsiValue < RSI_OVERBOUGHT)
+else if(buyDir == DIR_BULLISH and rsiValue > 50 and rsiValue < RSI_OVERBOUGHT)
     score += 5
     scoreInfo.push("RSI-hi")
 
@@ -205,17 +216,17 @@ isBuyGrade = (grade != "F")
 if isBuyGrade
     hoverText = str.tostring(score)
          +((scoreInfo.size() != 0) ? (": "+scoreInfo.join(", ")) : "")
-    labelColor = (pivotDir == DIR_BEARISH) ? BEARISH_COLOR : BULLISH_COLOR
+    labelColor = (buyDir == DIR_BEARISH) ? BEARISH_COLOR : BULLISH_COLOR
 
-    if(pivotDir == DIR_BEARISH)
+    if(buyDir == DIR_BEARISH)
         label.new(bar_index, high + BUY_LABEL_MARGIN, text="PUT "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_down)
-    else if(pivotDir == DIR_BULLISH)
+    else if(buyDir == DIR_BULLISH)
         label.new(bar_index, low - BUY_LABEL_MARGIN, text="CALL "+grade, tooltip=hoverText, color=labelColor, style=label.style_label_up)
 
 msg1 = "Buy Call or Put"
 alertcondition(isBuyGrade, title=msg1, message=msg1)
 msg2 = "Buy Call (bullish)"
-alertcondition(isBuyGrade and pivotDir == DIR_BULLISH, title=msg2, message=msg2)
+alertcondition(isBuyGrade and buyDir == DIR_BULLISH, title=msg2, message=msg2)
 msg3 = "Buy Put (bearish)"
-alertcondition(isBuyGrade and pivotDir == DIR_BEARISH, title=msg3,  message=msg3)
+alertcondition(isBuyGrade and buyDir == DIR_BEARISH, title=msg3,  message=msg3)
 
