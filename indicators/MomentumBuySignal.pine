@@ -128,7 +128,6 @@ oppositeWickLength = (dir0 == DIR_BEARISH)
      ? (haHigh[0] - math.max(haOpen[0], haClose[0])) // upper
      : (math.min(haOpen[0], haClose[0]) - haLow[0])  // lower
 
-// 2 candles one direction followed by 2 the opposite direction indicate a pivot
 growthRatioCheckA       = h0/math.min(h1, h2) >= MIN_GROWTH_RATIO
 prevGrowthRatioCheckA   = h1/math.min(h2, h3) >= MIN_GROWTH_RATIO
 growthRatioCheckB       = h0/h1 >= MIN_GROWTH_RATIO and h1/h2 >= MIN_GROWTH_RATIO
@@ -137,10 +136,11 @@ pivotCheckA             = dir2 != dir1 and dir3 == dir2 and dir1 == dir0 and gro
 prevPivotCheckA         = dir3 != dir2 and dir4 == dir3 and dir2 == dir1 and prevGrowthRatioCheckA
 // 1-3 pivot case for "waterfall" detection (up or down)
 pivotCheckB             = dir3 != dir2 and dir2 == dir1 and dir1 == dir0 and growthRatioCheckB and not prevPivotCheckA
-heightCheck             = h0 > h1
-trendCheck              = (dir0 == macroTrend or dir0 == microTrend)
-oppWickCheck            = oppositeWickLength <= MAX_OPPOSITE_WICK
-buyDir                  = ((pivotCheckA or pivotCheckB) and heightCheck and trendCheck and oppWickCheck)
+buyDir                  = ((pivotCheckA or pivotCheckB)
+                           and (h0 > h1)                                    // current candle must be taller than previous (accelerating)
+                           and (oppositeWickLength/h0 <= MAX_OPPOSITE_WICK) // oppisite wick length must be short (minimal slop)
+                           and (dir0 == macroTrend or dir0 == microTrend)   // direction must match either macro or micro trend
+                          )
                              ? dir0
                              : DIR_SIDEWAYS  // no buy
 
